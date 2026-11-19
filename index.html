@@ -223,6 +223,64 @@
     display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
     gap: 2.2rem 1.5rem; max-width: 1180px; margin: 0 auto;
   }
+  .pembina-wrap {
+    max-width: 1180px;
+    margin: 0 auto 2.2rem;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 430px));
+    justify-content: center;
+    gap: 1.5rem;
+  }
+  .pembina-card {
+    width: 100%;
+    margin: 0 auto;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    padding: 1.7rem 1.5rem 1.6rem;
+    border-radius: 24px;
+    background: linear-gradient(145deg, #fff, #f7edda);
+    border: 1px solid rgba(215, 181, 109, 0.48);
+    box-shadow: 0 16px 38px rgba(64, 5, 5, 0.16);
+  }
+  .pembina-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: var(--pattern);
+    background-size: 72px 72px;
+    opacity: 0.12;
+    pointer-events: none;
+  }
+  .pembina-card > * { position: relative; z-index: 1; }
+  .pembina-card .photo-frame {
+    width: 150px;
+    height: 150px;
+    margin-bottom: 1.2rem;
+    padding: 5px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, var(--emas-terang), var(--merah), var(--emas));
+  }
+  .pembina-card .photo-frame::after {
+    inset: -9px;
+    border-radius: 50%;
+    border: 2px solid rgba(215, 181, 109, 0.7);
+  }
+  .pembina-card .photo-frame img {
+    border-radius: 50%;
+  }
+  .pembina-label {
+    display: inline-block;
+    margin-bottom: 0.8rem;
+    padding: 0.35rem 1.1rem;
+    border-radius: 50px;
+    background: linear-gradient(135deg, var(--merah), #711414);
+    color: var(--emas-terang);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+  }
   .card-person {
     background: var(--putih); border: 1px solid rgba(64, 5, 5, 0.06);
     border-radius: var(--radius); padding: 1.6rem 1.2rem 1.7rem; text-align: center;
@@ -497,6 +555,7 @@
     .landscape-gallery { grid-template-columns: 1fr; }
     .gal-item.wide { grid-column: span 1; }
     .gal-item img, .gal-item.wide img { height: 190px; }
+    .pembina-wrap { grid-template-columns: 1fr; max-width: 430px; }
     section { padding: 72px 5%; }
   }
   @media (max-width: 480px) {
@@ -622,6 +681,7 @@
     <div class="divider"></div>
     <p>Struktur kepemimpinan Rohis periode ini</p>
   </div>
+  <div class="pembina-wrap" id="pembinaWrap"></div>
   <div class="pengurus-grid" id="pengurusGrid"></div>
 </section>
 
@@ -676,6 +736,10 @@
   let currentPhotoTarget = null;
 
   const DEFAULT_DATA = {
+    pembina: [
+      { nama: '', foto: 'https://randomuser.me/api/portraits/women/65.jpg' },
+      { nama: '', foto: 'https://randomuser.me/api/portraits/women/44.jpg' }
+    ],
     pengurus: [
       { jabatan: 'Ketua', nama: '', foto: 'https://randomuser.me/api/portraits/men/32.jpg' },
       { jabatan: 'Wakil Ketua', nama: '', foto: 'https://randomuser.me/api/portraits/men/45.jpg' },
@@ -721,7 +785,17 @@
   async function loadData() {
     try {
       const snap = await DOC_REF.get();
-      if (snap.exists) { data = snap.data(); }
+      if (snap.exists) {
+        data = snap.data();
+        if (!Array.isArray(data.pembina)) {
+          data.pembina = [
+            data.pembina || JSON.parse(JSON.stringify(DEFAULT_DATA.pembina[0]))
+          ];
+        }
+        while (data.pembina.length < 2) {
+          data.pembina.push(JSON.parse(JSON.stringify(DEFAULT_DATA.pembina[data.pembina.length])));
+        }
+      }
       else { data = JSON.parse(JSON.stringify(DEFAULT_DATA)); await DOC_REF.set(data); }
     } catch (e) {
       console.warn('Firebase load gagal, pakai default', e);
@@ -752,6 +826,19 @@
   }
 
   function renderPengurus() {
+    const pembinaWrap = document.getElementById('pembinaWrap');
+    pembinaWrap.innerHTML = data.pembina.slice(0, 2).map((pembina, i) => `
+      <div class="pembina-card">
+        <div class="photo-frame ${isAdmin ? 'editable' : ''}" data-type="pembina" data-index="${i}">
+          <img src="${pembina.foto}" alt="Pembina ROHIS ${i + 1}" loading="lazy" />
+          <span class="photo-edit-hint">📷 Upload foto</span>
+        </div>
+        <div class="pembina-label">Pembina ROHIS ${i + 1}</div>
+        <input type="text" class="nama-input" data-type="pembina" data-index="${i}"
+               value="${escapeHtml(pembina.nama)}" placeholder="Nama pembina..." ${isAdmin ? '' : 'readonly'} />
+      </div>
+    `).join('');
+
     const grid = document.getElementById('pengurusGrid');
     grid.innerHTML = '';
     data.pengurus.forEach((p, i) => {
@@ -836,6 +923,7 @@
         if (!isAdmin) return;
         const type = el.dataset.type;
         if (type === 'pengurus') data.pengurus[+el.dataset.index].nama = el.value;
+        else if (type === 'pembina') data.pembina[+el.dataset.index].nama = el.value;
         else if (type === 'ketua') data.sektor[+el.dataset.sektor].ketuaNama = el.value;
         else if (type === 'anggota') data.sektor[+el.dataset.sektor].anggota[+el.dataset.index].nama = el.value;
         scheduleSave();
@@ -962,7 +1050,8 @@
       const snapshot = await ref.put(file, { contentType: file.type });
       const url = await snapshot.ref.getDownloadURL();
 
-      if (type === 'pengurus') data.pengurus[index].foto = url;
+      if (type === 'pembina') data.pembina[index].foto = url;
+      else if (type === 'pengurus') data.pengurus[index].foto = url;
       else if (type === 'ketua') data.sektor[sektor].ketuaFoto = url;
       else if (type === 'anggota') data.sektor[sektor].anggota[index].foto = url;
 
